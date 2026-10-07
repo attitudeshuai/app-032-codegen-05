@@ -7,6 +7,11 @@ export type PageSize = 'A4' | 'A3'
 export type PanelShape = 'trapezoid' | 'rectangle' | 'sector' | 'circle' | 'triangle'
 export type MemberKind = 'vertical' | 'ring' | 'mouth_ring' | 'base_ring' | 'rib' | 'spoke'
 
+/** 挂点分摊方式：等分布置 / 按实际吊重分摊 */
+export type HangingStrategyId = 'equal' | 'load'
+/** 写明的安全档位 */
+export type SafetyGradeId = 'tight' | 'normal' | 'loose'
+
 export interface Point2 {
   x: number
   y: number
@@ -63,6 +68,8 @@ export interface Lantern {
   pageSize: PageSize
   /** 长条图跨页搭接量（mm） */
   overlapMm: number
+  /** 门廊横杆悬挂布置（不填则按默认值现算） */
+  hanging?: HangingSetup
   createdAt: string
   updatedAt: string
 }
@@ -146,3 +153,57 @@ export interface CheckResult {
   /** 相关数值，便于界面展示 */
   value?: string
 }
+
+// ===================== 挂点布置与受力核定 =====================
+
+/** 一个挂点上挂的灯（同一灯样，数量 ≥1） */
+export interface HangingLight {
+  id: string
+  /** 该点吊几盏（同种灯样） */
+  qty: number
+  /** 挂点 x 坐标（mm，自横杆左端 0 起）；等分法下留 0 由布置推算 */
+  xMm: number
+}
+
+/** 已打孔/已采用的布置快照（存本机；输入摘要一变即作废，孔要重开） */
+export interface HangingCommit {
+  strategy: HangingStrategyId
+  /** 已采用时的输入摘要（见 hangingDigest） */
+  digest: string
+  /** 已打孔位置（mm 取整），逐点 */
+  holesMm: number[]
+  /** 已采用的安全档位 */
+  grade: SafetyGradeId
+  /** 采用时刻 */
+  committedAt: string
+  /** 已导出受力表的摘要（导出即登记；变了旧表作废） */
+  exportedDigest?: string
+  exportedAt?: string
+}
+
+/** 挂点布置输入（挂在哪个灯样上，即“这一串”用该灯样） */
+export interface HangingSetup {
+  /** 横杆总长（mm） */
+  rodLengthMm: number
+  /** 左支座离左端（挑出端长度，mm） */
+  leftSupportMm: number
+  /** 右支座离右端（挑出端长度，mm） */
+  rightSupportMm: number
+  /** 横杆料 id（材料清单 rods） */
+  rodId: string
+  /** 安全档位 */
+  grade: SafetyGradeId
+  /** 受力分摊二选一 */
+  strategy: HangingStrategyId
+  /** 这一串共挂几盏（等分法自动分到各点；按吊重法取 groups 之和） */
+  lightCount: number
+  /** 等分布置用：挂几个点 */
+  equalPointCount: number
+  /** 按实际吊重分摊用：逐点交代的分组（位置与每点灯数） */
+  groups: HangingLight[]
+  /** 绳下垂净空（mm，灯顶到横杆） */
+  dropMm: number
+  /** 已采用（已打孔）的布置快照；输入一变即整体作废重算 */
+  commit?: HangingCommit | null
+}
+

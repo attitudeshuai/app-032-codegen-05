@@ -9,8 +9,11 @@
 import { computed, onUnmounted, reactive, watch, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ChecksPanel from '../components/ChecksPanel.vue'
+import RodDiagram from '../components/RodDiagram.vue'
 import { getLantern } from '../core/store'
 import { CALIBRATION_CIRCLE_MM, CALIBRATION_RULER_MM, computeAll } from '../core/checks'
+import { computeHanging, fM, fS, fT, fX, fG } from '../core/hanging'
+import { downloadText, forceTableCsv } from '../core/exporter'
 import {
   DEFAULT_LOFT_OPTIONS,
   PAPER_DIMS,
@@ -25,7 +28,7 @@ import { kindName, shapeName } from '../core/exporter'
 import { coveringLabel, kindLabel, styleLabel } from '../core/craft'
 import type { Panel } from '../core/types'
 
-type PrintMode = 'loft' | 'frame' | 'labels'
+type PrintMode = 'loft' | 'frame' | 'labels' | 'hanging'
 
 const route = useRoute()
 const router = useRouter()
@@ -33,8 +36,16 @@ const router = useRouter()
 const lantern = computed(() => getLantern(route.params.id as string))
 const mode = computed<PrintMode>(() => {
   const v = String(route.query.view || 'loft')
-  return v === 'frame' || v === 'labels' ? v : 'loft'
+  return v === 'frame' || v === 'labels' || v === 'hanging' ? v : 'loft'
 })
+
+const hang = computed(() => (lantern.value ? computeHanging(lantern.value) : null))
+
+function exportHangingCsv() {
+  const l = lantern.value
+  if (!l || !hang.value) return
+  downloadText(`${l.name}-横杆受力表.csv`, forceTableCsv(l, hang.value))
+}
 
 const opts = reactive<LoftOptions>({ ...DEFAULT_LOFT_OPTIONS })
 
@@ -235,6 +246,7 @@ function today(): string {
       <div class="tabs">
         <button :class="{ on: mode === 'loft' }" @click="setMode('loft')">1:1 放样图</button>
         <button :class="{ on: mode === 'frame' }" @click="setMode('frame')">构件清单（可打印）</button>
+        <button :class="{ on: mode === 'hanging' }" @click="setMode('hanging')">横杆受力表（可打印）</button>
         <button :class="{ on: mode === 'labels' }" @click="setMode('labels')">裁片标签</button>
       </div>
 
@@ -616,6 +628,101 @@ function today(): string {
         净长 {{ (full.frame.rawLengthMm / 1000).toFixed(3) }}m · 绑扎余量合计
         {{ f1(full.frame.lashExtraMm) }}mm
       </p>
+    </section>
+
+    <!-- ============ 横杆受力表（可打印） ============ -->
+    <section v-else-if="mode === 'hanging' && hang" class="doc hang-doc">
+      <div class="no-print doc-ops">
+        <button @click="exportHangingCsv">导出受力表 CSV</button>
+        <button @click="router.push(`/hanging/${lantern!.id}`)">回挂点页改布置</button>
+      </div>
+      <h1>门廊横杆受力表</h1>
+      <p class="doc-meta">
+        灯样：{{ lantern!.name }} · 单灯 {{ fG(hang.weight.totalG) }}g（{{ fT(hang.weight.totalN) }}N，g=9.80665）·
+        杆长 {{ fX(hang.setup.rodLengthMm) }}mm · {{ hang.rod.name }} · 档位「{{ hang.grade.spec.name }}」·
+        分摊法「{{ hang.setup.strategy === 'equal' ? '按挂点等分' : '按实际吊重分摊' }}」·
+        受力同源指纹 <b>{{ hang.digest }}</b> · 打印日期 {{ today() }}
+      </p>
+      <p class="doc-meta">
+        长度 mm 取整；拉力 N 保留 1 位小数；弯矩 N·m 保留 2 位小数。灯重：蒙面
+        {{ hang.weight.basis.coveringM2.toFixed(3) }}m²（含缝份）× {{ hang.weight.basis.coveringGM2 }}g/m² ＋
+        骨架 {{ hang.weight.basis.frameM.toFixed(3) }}m（含余量）× {{ hang.weight.basis.frameGPerM }}g/m ＋ 胶/扎线/LED/小件。
+      </p>
+
+      <RodDiagram :result="hang" :show-digest="false" />
+
+      <h3>挂点拉力与吊法</h3>
+      <table class="doc-table">
+        <thead>
+          <tr>
+            <th>挂点</th><th>位置 (mm)</th><th>灯数</th><th>拉力 (N)</th><th>折合 kg</th>
+            <th>吊法</th><th>每股 (N)</th><th>绳规格/许用 (N)</th><th>绳长 (m)</th><th>吊环/许用 (N)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="p in hang.points" :key="p.id">
+            <td>{{ p.id }}</td>
+            <td class="num mono">{{ fX(p.xMm) }}</td>
+            <td class="num mono">{{ p.qty }}</td>
+            <td class="num mono strong">{{ fT(p.tensionN) }}</td>
+            <td class="num mono">{{ p.tensionKg.toFixed(2) }}</td>
+            <td>{{ p.doubleSling ? '双吊索' : '单股直吊' }}</td>
+            <td class="num mono">{{ fT(p.perLegN) }}</td>
+            <td>{{ p.rope.name }} / {{ p.rope.ratedN }}</td>
+            <td class="num mono">{{ p.ropeLengthM.toFixed(2) }}</td>
+            <td>{{ p.ring.name }} / {{ p.ring.ratedN }}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>支座反力（与挑出端分开）</h3>
+      <table class="doc-table">
+        <thead><tr><th>支座</th><th>位置 (mm)</th><th>反力 (N)</th><th>折合 kg</th><th>状态</th><th>固定环/许用 (N)</th></tr></thead>
+        <tbody>
+          <tr v-for="s in hang.supports" :key="s.id">
+            <td>{{ s.id }}</td>
+            <td class="num mono">{{ fX(s.xMm) }}</td>
+            <td class="num mono strong">{{ fT(s.reactionN) }}</td>
+            <td class="num mono">{{ s.reactionKg.toFixed(2) }}</td>
+            <td :style="s.uplift ? 'color:#b3241f;font-weight:700' : ''">{{ s.uplift ? '上拔！需压重/锚固' : '下压' }}</td>
+            <td>{{ s.ring.name }} / {{ s.ring.ratedN }}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>逐段弯矩 / 应力 / 挠度</h3>
+      <table class="doc-table">
+        <thead>
+          <tr>
+            <th>段</th><th>起 (mm)</th><th>止 (mm)</th><th>部位</th><th>弯矩 (N·m)</th><th>极值位置</th>
+            <th>节点集中法核对</th><th>剪力 (N)</th><th>应力 (MPa)</th><th>挠度 (mm)</th><th>加固</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="s in hang.segments" :key="s.index" :style="hang.grade.failingSegments.includes(s.index) ? 'background:#fdecea' : ''">
+            <td>{{ s.index }}</td>
+            <td class="num mono">{{ fX(s.fromMm) }}</td>
+            <td class="num mono">{{ fX(s.toMm) }}</td>
+            <td>{{ s.kind === 'span' ? '跨间' : s.kind === 'left-overhang' ? '左挑出端' : '右挑出端' }}</td>
+            <td class="num mono strong">{{ fM(s.maxNodeMNmm) }}</td>
+            <td class="num mono">{{ fX(s.maxAtMm) }}{{ s.maxAtEvent ? '' : '（剪力零点）' }}</td>
+            <td class="num mono">{{ fM(s.maxExactMNmm) }}</td>
+            <td class="num mono">{{ fT(s.maxShearN) }}</td>
+            <td class="num mono">{{ fS(s.stressMPa) }}</td>
+            <td class="num mono">{{ fT(s.deflectionMm) }}</td>
+            <td>{{ s.braced ? '钢套管' : '—' }}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p class="doc-foot">
+        核定结论：<b :style="hang.pass ? 'color:#2f7a63' : 'color:#b3241f'">{{ hang.pass ? '在「' + hang.grade.spec.name + '」档位内通过' : '超出「' + hang.grade.spec.name + '」档位' }}</b>
+        ｜许用应力 {{ fS(hang.grade.limitStressMPa) }}MPa、挠度限值 {{ fX(hang.grade.allowDeflectionMm) }}mm
+        ｜力平衡残差 {{ fT(hang.equilibrium.residualN) }}N、杆端闭合 {{ fM(hang.equilibrium.tipClosureNmm) }}N·m
+        ｜挂件：绳 {{ hang.hardware.ropeTotalM.toFixed(2) }}m、吊环 {{ hang.hardware.ringTotalQty }} 个、加固
+        {{ hang.hardware.braceQty }} 件、{{ hang.hardware.holeCount }} 孔、估工 {{ hang.hardware.laborMin }}min
+      </p>
+      <ChecksPanel v-if="hang" class="no-print" :checks="hang.checks" title="受力核定自检" />
     </section>
 
     <!-- ============ 裁片标签 ============ -->
@@ -1049,6 +1156,24 @@ button.primary:hover {
   margin-top: 10px;
   font-size: 11px;
   color: var(--ink-soft);
+}
+
+.doc h3 {
+  margin: 12px 0 5px;
+  font-size: 13px;
+  color: #8f1c19;
+}
+
+.doc-ops {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.hang-doc :deep(svg) {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  margin: 8px 0;
 }
 
 .num {

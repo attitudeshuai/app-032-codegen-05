@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import LanternPreview from '../components/LanternPreview.vue'
+import RodDiagram from '../components/RodDiagram.vue'
 import ChecksPanel from '../components/ChecksPanel.vue'
 import { getLantern, distributeLayers, syncLayerDiameters } from '../core/store'
 import { computeAll } from '../core/checks'
@@ -9,6 +10,7 @@ import { DEFAULT_LOFT_OPTIONS } from '../core/paginate'
 import { buildGeometry, polyhedronInfo, r1 } from '../core/geometry'
 import { COVERINGS, CRAFT, coveringSpec, kindLabel } from '../core/craft'
 import { diameterFromPerimeter, diameterFromRib } from '../core/checks'
+import { computeHanging, fM, fT, fX, fG } from '../core/hanging'
 import type { Lantern, Panel } from '../core/types'
 
 const route = useRoute()
@@ -26,6 +28,18 @@ const full = computed(() => {
   if (!l) return null
   return computeAll(l, loft.value)
 })
+
+/** 横杆受力：与材料页/导出同一份 computeHanging() 结果（同源指纹一致） */
+const hang = computed(() => (lantern.value ? computeHanging(lantern.value) : null))
+const hangMaxM = computed(() => (hang.value ? Math.max(...hang.value.segments.map((s) => s.maxNodeMNmm)) : 0))
+const hangFailText = computed(() =>
+  (hang.value?.grade.failingSegments || [])
+    .map((i) => {
+      const s = hang.value!.segments[i - 1]
+      return `第${i}段 ${fX(s.fromMm)}–${fX(s.toMm)}mm（${fM(s.maxNodeMNmm)}N·m）`
+    })
+    .join('、')
+)
 
 const geo = computed(() => (lantern.value ? buildGeometry(lantern.value) : null))
 const shoulderPct = computed(() => (geo.value ? ((geo.value.kTop + geo.value.kBot) * 100).toFixed(0) : '0'))
@@ -362,6 +376,32 @@ function onCtrl(v: { which: 1 | 2; x: number; y: number }) {
         </ul>
       </div>
 
+      <!-- ============ 门廊横杆挂点与每段受力（与材料页/导出同源） ============ -->
+      <section v-if="hang" class="rod-box" :class="{ fail: !hang.pass }">
+        <header class="rod-head">
+          <h4>门廊横杆 · 挂点与逐段受力</h4>
+          <router-link :to="`/hanging/${lantern.id}`">去挂点页改布置 / 看改法 →</router-link>
+        </header>
+        <p class="rod-note">
+          单灯重 <b>{{ fG(hang.weight.totalG) }}g（{{ fT(hang.weight.totalN) }}N）</b>——蒙面按含缝份面积
+          {{ hang.weight.basis.coveringM2.toFixed(3) }}m² × {{ hang.weight.basis.coveringGM2 }}g/m²、骨架按备料长度
+          {{ hang.weight.basis.frameM.toFixed(3) }}m × {{ hang.weight.basis.frameGPerM }}g/m，取自材料页同一组数。
+          {{ hang.setup.lightCount }} 盏 · {{ hang.points.length }} 挂点 · 最大弯矩 {{ fM(hangMaxM) }}N·m ·
+          <b :class="hang.pass ? 'ok' : 'bad'">{{ hang.pass ? '档位内 ✔' : '超档 ✖' }}</b>
+          <span class="digest">指纹 {{ hang.digest }}</span>
+        </p>
+        <RodDiagram :result="hang" compact :show-digest="false" />
+        <div v-if="hang && !hang.pass" class="rod-fail">
+          超档段：{{ hangFailText || '无（应力段未超）' }}
+          {{ hang.grade.upliftSupports.length ? '；支座 ' + hang.grade.upliftSupports.join('、') + ' 上拔' : '' }}
+          ——可在挂点页选「加挂点」或「把灯挪开」，两条路的代价都已列出。
+        </div>
+        <ChecksPanel
+          :checks="hang.checks.filter((c) => ['CHK-H1', 'CHK-H4', 'CHK-H5', 'CHK-H6'].includes(c.id))"
+          title="挂点受力同源核对（材料页/导出同指纹）"
+        />
+      </section>
+
       <ChecksPanel v-if="full" :checks="full.checks" :elapsed-ms="full.elapsedMs" title="参数自检" />
     </section>
   </div>
@@ -656,6 +696,68 @@ button:hover {
   border-radius: 3px;
   margin-right: 6px;
   border: 1px solid var(--line-strong);
+}
+
+.rod-box {
+  margin: 0;
+  padding: 10px 14px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+
+.rod-box.fail {
+  border-color: #d8534a;
+}
+
+.rod-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.rod-head h4 {
+  margin: 0 0 4px;
+  font-size: 13.5px;
+  color: #8f1c19;
+}
+
+.rod-head a {
+  font-size: 12px;
+}
+
+.rod-note {
+  margin: 0 0 8px;
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  line-height: 1.7;
+}
+
+.rod-note .ok {
+  color: var(--jade);
+}
+
+.rod-note .bad {
+  color: var(--red);
+}
+
+.rod-note .digest {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: #8a7a68;
+  margin-left: 4px;
+}
+
+.rod-fail {
+  margin: 6px 0 8px;
+  padding: 7px 10px;
+  font-size: 11.5px;
+  color: #8f1c19;
+  background: #fbeae6;
+  border: 1px solid #e7c3bb;
+  border-radius: 6px;
 }
 
 .missing {

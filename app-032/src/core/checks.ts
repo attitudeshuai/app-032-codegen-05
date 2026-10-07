@@ -9,6 +9,7 @@ import { buildPanels, panelNetArea, type PanelResult } from './panels'
 import { computeBatch, computeMaterials, type BatchMaterials, type SingleLightMaterials } from './materials'
 import { assertNoPanelSplit, paginate, type LoftOptions, type Sheet } from './paginate'
 import { CRAFT } from './craft'
+import { lanternWeight } from './hanging'
 
 export interface FullResult {
   frame: FrameResult
@@ -188,6 +189,30 @@ function runChecks(
       pass,
       value: `${elapsedMs.toFixed(1)}ms`,
       detail: `${l.divisions} 等分 × ${l.layers.length} 层：构件 ${frame.totalQty} 根、裁片 ${panels.totalQty} 块、图纸 ${sheets.length} 页，全流程耗时 ${elapsedMs.toFixed(1)}ms（含分页）`
+    })
+  }
+
+  // ---- CHK-09 灯重与挂杆受力同源：备料单重量 = 受力核定取数 ----
+  {
+    const w = lanternWeight(l, materials)
+    const covArea = materials.coveringM2
+    const covWeightGM2 = w.basis.coveringGM2
+    // 独立重算（模拟材料页按面积乘单位克重），与挂杆模块对账
+    const coverByArea = covArea * covWeightGM2
+    const frameByLength = materials.frameM * w.basis.frameGPerM
+    const pass =
+      Math.abs(coverByArea - w.coveringG) <= 0.01 &&
+      Math.abs(frameByLength - w.frameG) <= 0.01 &&
+      w.totalG > 0
+    out.push({
+      id: 'CHK-09',
+      title: '备料重量 = 挂杆受力取数（蒙面按面积、骨架按备料长度，不按张数另估）',
+      pass,
+      value: `${f1(w.totalG)}g / ${f1(w.totalN)}N`,
+      detail:
+        `蒙面 ${f3(covArea)}m²×${covWeightGM2}g/m²=${f1(coverByArea)}g；骨架 ${f3(materials.frameM)}m×${w.basis.frameGPerM}g/m=${f1(frameByLength)}g；` +
+        `胶 ${f1(w.glueG)}g、扎线 ${f1(w.lashG)}g、LED ${f1(w.ledG)}g、小件 ${f1(w.fittingsG)}g，单灯合计 ${f1(w.totalG)}g = ${f1(w.totalN)}N；` +
+        `材料页挂件行、挂点页拉力、导出受力表都取这一份。`
     })
   }
 

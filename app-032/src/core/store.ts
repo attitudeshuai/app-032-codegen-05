@@ -147,7 +147,14 @@ export function loadStore() {
     const raw = localStorage.getItem(KEY)
     if (raw) {
       const data = JSON.parse(raw) as { lanterns?: Lantern[] }
-      if (Array.isArray(data.lanterns)) state.lanterns = data.lanterns
+      if (Array.isArray(data.lanterns)) {
+        state.lanterns = data.lanterns
+        // 旧版本灯样没有挂杆字段：hanging 缺省时由 computeHanging 取默认值，
+        // 不写回默认对象（避免无改动也产生摘要/作废）。
+        for (const l of state.lanterns) {
+          if (l.hanging === null) l.hanging = undefined
+        }
+      }
     }
   } catch {
     state.storageError = '本地灯样数据损坏，已重置'

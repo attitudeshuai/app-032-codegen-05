@@ -19,25 +19,28 @@
       "id": "xuan",
       "name": "宣纸",
       "gluePerM2": 45,
+      "weightGM2": 110,
       "wasteRatio": 0.12,
       "color": "#f7f2e4",
-      "note": "吸水性强，缝份建议 10~12mm，胶用浆糊"
+      "note": "吸水性强，缝份建议 10~12mm，胶用浆糊；面密度 110g/m²（含浆糊后另计胶重）"
     },
     {
       "id": "silk",
       "name": "绸布",
       "gluePerM2": 25,
+      "weightGM2": 95,
       "wasteRatio": 0.1,
       "color": "#e9c7c7",
-      "note": "易滑，裁片需略加湿定型，缝份建议 10mm"
+      "note": "易滑，裁片需略加湿定型，缝份建议 10mm；面密度 95g/m²"
     },
     {
       "id": "parchment",
       "name": "羊皮纸",
       "gluePerM2": 35,
+      "weightGM2": 180,
       "wasteRatio": 0.08,
       "color": "#e7d3ad",
-      "note": "挺度好，折边可用低温熨烫定型"
+      "note": "挺度好，折边可用低温熨烫定型；面密度 180g/m²"
     }
   ],
   "presets": [
@@ -192,5 +195,85 @@
         "color": "#b8492a"
       }
     }
-  ]
+  ],
+  "hanging": {
+    "gravity": 9.80665,
+    "frameBamboo": {
+      "id": "bamboo-篾",
+      "name": "竹篾骨架（平均，含绑扎节点）",
+      "weightGPerM": 12,
+      "note": "按备料单 Σ含余量竹篾长度 × 12g/m，与现场过磅抽样一致"
+    },
+    "extras": {
+      "lashGPerM": 8,
+      "ledEachG": 3,
+      "fittingsEachG": 6,
+      "note": "扎线 8g/m；LED 含导线 3g/颗；每灯收口挂钩等小件 6g"
+    },
+    "ropes": [
+      { "id": "cotton-3", "name": "棉绳 Ø3mm", "weightGPerM": 4.5, "ratedN": 60, "note": "单股许用拉力 60N（约 6.1kg）" },
+      { "id": "nylon-4", "name": "尼龙绳 Ø4mm", "weightGPerM": 9, "ratedN": 150, "note": "单股许用拉力 150N（约 15.3kg）" },
+      { "id": "nylon-6", "name": "尼龙绳 Ø6mm", "weightGPerM": 20, "ratedN": 320, "note": "单股许用拉力 320N（约 32.6kg）" }
+    ],
+    "rings": [
+      { "id": "ring-s", "name": "M5 吊环（小）", "weightG": 18, "ratedN": 80, "note": "许用 80N" },
+      { "id": "ring-m", "name": "M6 吊环（中）", "weightG": 32, "ratedN": 170, "note": "许用 170N" },
+      { "id": "ring-l", "name": "M8 吊环（大）", "weightG": 58, "ratedN": 350, "note": "许用 350N" }
+    ],
+    "brace": { "id": "steel-sleeve", "name": "钢套管加固件（长100mm，含2枚自攻钉）", "weightG": 90 },
+    "rods": [
+      {
+        "id": "bamboo-50",
+        "name": "毛竹杆 Ø50（t≈5mm，平均空心圆）",
+        "densityKgM3": 700,
+        "outerDiamMm": 50,
+        "innerDiamMm": 40,
+        "sectionShape": "annulus",
+        "bendAllowMPa": 16,
+        "emodGPa": 9,
+        "pricePerM": 1.4,
+        "note": "抗弯许用 16MPa，E=9GPa；自然圆度按中径取，便宜但挑直度"
+      },
+      {
+        "id": "pine-40",
+        "name": "松木方 40×60mm（顺纹）",
+        "densityKgM3": 520,
+        "outerDiamMm": 60,
+        "innerDiamMm": 0,
+        "sectionShape": "rect",
+        "bMm": 40,
+        "hMm": 60,
+        "bendAllowMPa": 11,
+        "emodGPa": 9,
+        "pricePerM": 2.2,
+        "note": "抗弯许用 11MPa（顺纹），E=9GPa；按竖放 40×60 计"
+      },
+      {
+        "id": "steel-dn40",
+        "name": "钢管 DN40（Ø48.3×3.2mm）",
+        "densityKgM3": 7850,
+        "outerDiamMm": 48.3,
+        "innerDiamMm": 41.9,
+        "sectionShape": "annulus",
+        "bendAllowMPa": 160,
+        "emodGPa": 206,
+        "pricePerM": 7.5,
+        "note": "Q235 抗弯许用 160MPa，E=206GPa；重、直、最省事"
+      }
+    ],
+    "grades": [
+      { "id": "tight", "name": "紧（庙会人流上方/长期挂展）", "stressRatio": 0.6, "deflectionRatio": 250, "note": "应力用 60% 许用，挠度 ≤ 跨/250" },
+      { "id": "normal", "name": "常态（门廊常规悬挂）", "stressRatio": 0.8, "deflectionRatio": 150, "note": "应力用 80% 许用，挠度 ≤ 跨/150" },
+      { "id": "loose", "name": "宽（临时、无人触碰、当晚拆）", "stressRatio": 1.0, "deflectionRatio": 100, "note": "用满许用，挠度 ≤ 跨/100" }
+    ],
+    "labor": {
+      "drillMin": 4,
+      "tiePerPointMin": 6,
+      "tiePerLampMin": 1.5,
+      "ringInstallMin": 3,
+      "cutRopeExtraM": 0.1,
+      "slingSpreadMm": 240,
+      "note": "钻孔含对位 4min/孔；每点绑扎 6min + 每盏 1.5min；吊环安装 3min/个；绳端处理每点加 0.1m；双吊索摊开 240mm"
+    }
+  }
 }
