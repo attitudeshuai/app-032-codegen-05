@@ -2,8 +2,11 @@
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import LanternPreview from '../components/LanternPreview.vue'
+import BeamDiagram from '../components/BeamDiagram.vue'
 import ChecksPanel from '../components/ChecksPanel.vue'
-import { getLantern, distributeLayers, syncLayerDiameters } from '../core/store'
+import { getLantern, distributeLayers, state as lanternState, syncLayerDiameters } from '../core/store'
+import { ensureState } from '../core/hangingStore'
+import { computeHanging } from '../core/hanging'
 import { computeAll } from '../core/checks'
 import { DEFAULT_LOFT_OPTIONS } from '../core/paginate'
 import { buildGeometry, polyhedronInfo, r1 } from '../core/geometry'
@@ -25,6 +28,20 @@ const full = computed(() => {
   const l = lantern.value
   if (!l) return null
   return computeAll(l, loft.value)
+})
+
+/** 挂点受力：三处同源 —— 与挂点页、材料页、导出调同一个 computeHanging */
+const hanging = computed(() => {
+  const l = lantern.value
+  if (!l) return null
+  const s = ensureState(l.id, l)
+  return computeHanging(
+    l,
+    s.beam,
+    s.strategy,
+    s.items,
+    (id) => lanternState.lanterns.find((x) => x.id === id)
+  )
 })
 
 const geo = computed(() => (lantern.value ? buildGeometry(lantern.value) : null))
@@ -362,6 +379,24 @@ function onCtrl(v: { which: 1 | 2; x: number; y: number }) {
         </ul>
       </div>
 
+      <div v-if="hanging" class="hanging-strip">
+        <div class="hs-head">
+          <h4>门廊横杆挂点与受力（第 {{ hanging.revision }} 版，与挂点页/材料页/导出同源）</h4>
+          <router-link :to="lantern ? `/hanging/${lantern.id}` : ''" class="hs-link">去布置/核定 →</router-link>
+        </div>
+        <BeamDiagram :result="hanging" :height="330" />
+        <div class="hs-foot">
+          <span :class="hanging.allPass ? 'ok' : 'bad'">
+            {{ hanging.allPass ? '全杆合格' : hanging.checks.length + ' 段超档' }}
+          </span>
+          · 挂点 {{ hanging.groups.length }} 个 · 总挂重 {{ hanging.totalLanternKg }}kg ·
+          峰值 {{ hanging.globalPeakNm.toFixed(1) }}N·m@{{ hanging.globalPeakXMm }}mm
+          <ul class="hs-changes">
+            <li v-for="(t, i) in hanging.changes.preview.slice(0, 3)" :key="i">本页标注变化：{{ t }}</li>
+          </ul>
+        </div>
+      </div>
+
       <ChecksPanel v-if="full" :checks="full.checks" :elapsed-ms="full.elapsedMs" title="参数自检" />
     </section>
   </div>
@@ -661,6 +696,55 @@ button:hover {
 .missing {
   padding: 40px;
   text-align: center;
+  color: var(--ink-soft);
+}
+
+.hanging-strip {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 10px 12px 12px;
+}
+
+.hs-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.hs-head h4 {
+  margin: 0 0 4px;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.hs-link {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.hs-foot {
+  font-size: 12px;
+  color: var(--ink-soft);
+  margin-top: 4px;
+}
+
+.hs-foot .ok {
+  color: var(--jade);
+  font-weight: 700;
+}
+
+.hs-foot .bad {
+  color: var(--red);
+  font-weight: 700;
+}
+
+.hs-changes {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: 11.5px;
   color: var(--ink-soft);
 }
 </style>

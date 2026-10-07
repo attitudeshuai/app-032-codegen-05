@@ -31,14 +31,30 @@
    │  ├─ geometry.ts                 # 轮廓 / 分段 / 周长 / 面积 / 体积
    │  ├─ frame.ts                    # 骨架构件表（净长 + 绑扎余量）
    │  ├─ panels.ts                   # 展开裁片（含缝份与对位标记）
-   │  ├─ materials.ts                # 备料统计与批量汇总
-   │  ├─ craft.ts                    # 工艺参数、蒙面类型
+   │  ├─ materials.ts                # 备料统计、批量汇总与单灯重量分项
+   │  ├─ craft.ts                    # 工艺参数、蒙面面密度、横杆截面/安全档
    │  ├─ paginate.ts                 # 1:1 分页（裁片不跨页、长条搭接）
-   │  ├─ checks.ts                   # computeAll + CHK-01~08 断言
-   │  ├─ exporter.ts                 # CSV 导出
+   │  ├─ checks.ts                   # computeAll + CHK-01~12 断言
+   │  ├─ hanging.ts                  # 挂点布置与受力核定（重量同源/反力/逐段弯矩/两种分摊/改法）
+   │  ├─ hangingStore.ts             # 每灯样的横杆参数·挂灯清单·方案·版本（localStorage）
+   │  ├─ exporter.ts                 # CSV 导出（构件/裁片/备料/受力表/挂装备料单）
    │  └─ store.ts                    # localStorage 灯样库
-   └─ views/                         # / · /design · /frame · /panels · /print · /materials
+   ├─ components/
+   │  ├─ BeamDiagram.vue             # 横杆：挂点拉力/支座反力/每段弯矩（预览页与挂点页共用）
+   │  └─ …（LanternPreview / PanelDiagram / ChecksPanel）
+   └─ views/                         # / · /design · /frame · /panels · /hanging · /print · /materials
 ```
+
+## 挂点布置与受力核定（/hanging/:id）
+
+门廊横杆挂一串花灯的「挂几个点、每点吊几盏、杆受不受得住」核定：
+
+- **灯重不另估**：每盏灯重只取自 `computeMaterials()`——蒙面用既有**含缝份裁片面积** × 同一份材料清单（`lantern-types.json` 的 `areaWeightGPerM2`），骨架用**备料总长** × `frameWeightGPerM`；受力、材料页、导出三处共用 `totalWeightG`，不允许一处按面积、一处按张数（CHK-09）。
+- **三处同源**：参数与灯体预览页（横杆图）、备料统计与材料页（挂绳/吊环/加固件）、导出清单（受力表 + 挂装备料单）全部调用同一个 `computeHanging()` 对象，同一挂点拉力、同一段弯矩无出入（CHK-12）。
+- **一改全算 + 版本作废**：改蒙面材料、加灯、挪灯、改杆/支座/档位/分摊方式即整杆重算并升 `revision`；旧版结果、已存布置、已导出表、旧孔位、旧分组/安全余量判定/配绳长度全部标记作废，页面与 CSV 写明，并列三处各变了什么。
+- **两种分摊（二选一，写清代价）**：`even` 按挂点等分（孔位等距、现场好挂、工时低，各段弯矩差大）；`weighted` 按实际吊重分摊（各段更匀、杆更省，但每点吊法与绳索要逐点交代、工时高）。被放弃方案写明让出多少杆料/现场工。
+- **受力口径**：重量先按克、F=m·g（g=9.81）算牛再折千克；长度 mm（孔位取整）、拉力留 1 位小数 N、弯矩 1 位小数 N·m；**支座反力与两端挑出端分开算**，从左端逐段累加，右端 M=0、反力和=总载（CHK-10）；极值只落在挂点/支座（CHK-11）。
+- **超档点名 + 两条改法**：点名具体段，给出「加挂点」（多孔多绳多工、杆料可不加）与「把灯挪开」（不开孔、改配绳、灯位不匀）两条，含代价/取舍与同口径模拟；挑出端段提示加孔不适用、应挪灯或移支座。
 
 ## 启动
 

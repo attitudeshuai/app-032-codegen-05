@@ -29,6 +29,27 @@ export interface SingleLightMaterials {
   ledCount: number
   /** 灯体表面积（m²） */
   surfaceM2: number
+
+  // ---- 单灯重量分项（g）：不另估，蒙面取自 buildPanels 的裁片面积、骨架取自 buildFrame 的备料长度，
+  //      单位重量全部取自同一份材料清单 lantern-types.json；备料单重量与此处必须一致 ----
+  /** 骨架重 = 备料总长（含绑扎余量，m）× 骨架条线密度 */
+  frameWeightG: number
+  /** 蒙面重 = 裁片面积合计（含缝份，m²）× 蒙面面密度（与备料统计同一面积口径，不按张数另算） */
+  coveringWeightG: number
+  /** 扎线重 */
+  lashWeightG: number
+  /** 胶重（按上胶量，计入整灯重量） */
+  glueWeightG: number
+  /** LED 灯珠重 */
+  ledWeightG: number
+  /** 灯内电池重（默认 1 节；重量档写明，不可另估） */
+  batteryWeightG: number
+  /** 顶部吊挂小五金（挂钩/铁丝扣）重 */
+  hardwareWeightG: number
+  /** 单灯总重（g）= 以上分项之和；受力模块只准取这一个数 */
+  totalWeightG: number
+  /** 单灯总重（kg，展示用，= totalWeightG / 1000） */
+  totalWeightKg: number
 }
 
 export interface BatchMaterials extends SingleLightMaterials {
@@ -49,21 +70,42 @@ export function computeMaterials(l: Lantern): SingleLightMaterials {
   const volumeL = bodyVolume(frame.geometry) / 1_000_000
   const led = Math.max(CRAFT.led.min, Math.ceil(volumeL * CRAFT.led.perLiter))
 
+  // 重量（g）：长度走备料总长（含余量）、面积走裁片面积（含缝份），单位重量走同一份材料清单
+  const frameWeightG = (frameMm / 1000) * CRAFT.frameWeightGPerM
+  const coveringWeightG = (cutArea / 1_000_000) * cov.areaWeightGPerM2
+  const lashM = joints * CRAFT.lashPerJointM
+  const lashWeightG = lashM * CRAFT.lashWeightGPerM
+  const glueG = (cutArea / 1_000_000) * cov.gluePerM2
+  const ledWeightG = led * CRAFT.ledWeightGEach
+  const batteryWeightG = CRAFT.batteryWeightGEach
+  const hardwareWeightG = CRAFT.suspensionHardwareWeightGEach
+  const totalWeightG =
+    frameWeightG + coveringWeightG + lashWeightG + glueG + ledWeightG + batteryWeightG + hardwareWeightG
+
   return {
     frameM: r3(frameMm / 1000),
     frameRawM: r3(frameRawMm / 1000),
     coveringM2: r3(cutArea / 1_000_000),
     coveringNetM2: r3(panelRes.netAreaMm2 / 1_000_000),
-    lashM: r3(joints * CRAFT.lashPerJointM),
-    glueG: r1((cutArea / 1_000_000) * cov.gluePerM2),
+    lashM: r3(lashM),
+    glueG: r1(glueG),
     lashJoints: joints,
     volumeL: r3(volumeL),
     ledCount: led,
-    surfaceM2: r3(bodySurfaceArea(frame.geometry, divisions) / 1_000_000)
+    surfaceM2: r3(bodySurfaceArea(frame.geometry, divisions) / 1_000_000),
+    frameWeightG: r1(frameWeightG),
+    coveringWeightG: r1(coveringWeightG),
+    lashWeightG: r1(lashWeightG),
+    glueWeightG: r1(glueG),
+    ledWeightG: r1(ledWeightG),
+    batteryWeightG: r1(batteryWeightG),
+    hardwareWeightG: r1(hardwareWeightG),
+    totalWeightG: r1(totalWeightG),
+    totalWeightKg: r3(totalWeightG / 1000)
   }
 }
 
-/** 批量化：单灯 × N × (1 + 损耗率)；LED 按颗数 × N（不参与损耗率） */
+/** 批量化：单灯 × N × (1 + 损耗率)；LED/电池/五金按颗数/件数 × N（不参与损耗率）；重量同口径 */
 export function computeBatch(single: SingleLightMaterials, count: number, wasteRatio: number): BatchMaterials {
   const k = count * (1 + wasteRatio)
   return {
@@ -78,6 +120,16 @@ export function computeBatch(single: SingleLightMaterials, count: number, wasteR
     glueG: r1(single.glueG * k),
     volumeL: r3(single.volumeL * count),
     ledCount: single.ledCount * count,
-    surfaceM2: r3(single.surfaceM2 * count)
+    surfaceM2: r3(single.surfaceM2 * count),
+    // 骨架/蒙面/扎线/胶随料走损耗；LED/电池/五金按件 ×N 不打损耗
+    frameWeightG: r1(single.frameWeightG * k),
+    coveringWeightG: r1(single.coveringWeightG * k),
+    lashWeightG: r1(single.lashWeightG * k),
+    glueWeightG: r1(single.glueWeightG * k),
+    ledWeightG: r1(single.ledWeightG * count),
+    batteryWeightG: r1(single.batteryWeightG * count),
+    hardwareWeightG: r1(single.hardwareWeightG * count),
+    totalWeightG: r1(single.totalWeightG * count),
+    totalWeightKg: r3((single.totalWeightG * count) / 1000)
   }
 }

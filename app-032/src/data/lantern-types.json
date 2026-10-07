@@ -8,6 +8,24 @@
     "divMin": 6,
     "divMax": 96,
     "lashPerJointM": 0.5,
+    "frameWeightGPerM": 120,
+    "lashWeightGPerM": 18,
+    "ledWeightGEach": 4,
+    "batteryWeightGEach": 30,
+    "suspensionHardwareWeightGEach": 25,
+    "gravity": 9.81,
+    "hanging": {
+      "ropeWeightGPerM": 32,
+      "ringWeightGEach": 12,
+      "clampWeightGEach": 90,
+      "stiffenerWeightGEach": 160,
+      "ropeWasteRatio": 0.08,
+      "hardwareWasteRatio": 0.05,
+      "installMinutesPerPointEven": 3,
+      "installMinutesPerPointWeighted": 6,
+      "redrillMinutesPerHole": 5,
+      "ropeTieMinutesPerPointExtra": 3
+    },
     "led": {
       "perLiter": 0.35,
       "min": 12,
@@ -19,25 +37,28 @@
       "id": "xuan",
       "name": "宣纸",
       "gluePerM2": 45,
+      "areaWeightGPerM2": 70,
       "wasteRatio": 0.12,
       "color": "#f7f2e4",
-      "note": "吸水性强，缝份建议 10~12mm，胶用浆糊"
+      "note": "吸水性强，缝份建议 10~12mm，胶用浆糊；面密度约 70g/m²"
     },
     {
       "id": "silk",
       "name": "绸布",
       "gluePerM2": 25,
+      "areaWeightGPerM2": 60,
       "wasteRatio": 0.1,
       "color": "#e9c7c7",
-      "note": "易滑，裁片需略加湿定型，缝份建议 10mm"
+      "note": "易滑，裁片需略加湿定型，缝份建议 10mm；面密度约 60g/m²"
     },
     {
       "id": "parchment",
       "name": "羊皮纸",
       "gluePerM2": 35,
+      "areaWeightGPerM2": 120,
       "wasteRatio": 0.08,
       "color": "#e7d3ad",
-      "note": "挺度好，折边可用低温熨烫定型"
+      "note": "挺度好，折边可用低温熨烫定型；面密度约 120g/m²"
     }
   ],
   "presets": [
@@ -191,6 +212,58 @@
         "layerColors": ["#b8492a", "#b8492a"],
         "color": "#b8492a"
       }
+    }
+  ],
+  "beamSections": [
+    {
+      "id": "bamboo-d80",
+      "name": "毛竹横杆（外径 80mm）",
+      "shape": "circle",
+      "diameterMm": 80,
+      "innerDiameterMm": 60,
+      "weightGPerM": 1500,
+      "allowableBendingMPa": 9.0,
+      "note": "整根毛竹按空心圆截面估算，弹性好、自重轻，适合 3m 以内门廊"
+    },
+    {
+      "id": "wood-60x90",
+      "name": "松木方料 60×90mm",
+      "shape": "rect",
+      "widthMm": 60,
+      "heightMm": 90,
+      "weightGPerM": 2700,
+      "allowableBendingMPa": 10.0,
+      "note": "平放，竖向截面高 90mm；抗弯按松木顺纹抗弯设计值"
+    },
+    {
+      "id": "steel-dn40",
+      "name": "镀锌钢管 DN40（外径 48mm）",
+      "shape": "circle",
+      "diameterMm": 48,
+      "innerDiameterMm": 42,
+      "weightGPerM": 3300,
+      "allowableBendingMPa": 160.0,
+      "note": "脚手架常用规格，自重大但抗弯富余多，可重复使用"
+    }
+  ],
+  "safetyTiers": [
+    {
+      "id": "rough",
+      "name": "临时档（灯会 3 天内）",
+      "factor": 1.5,
+      "note": "只允许室内/无风环境短期使用，每日检查绑扎"
+    },
+    {
+      "id": "standard",
+      "name": "常规档（节庆 15 天）",
+      "factor": 2.5,
+      "note": "门廊常规挂灯档位，考虑阵风与轻微碰撞"
+    },
+    {
+      "id": "strict",
+      "name": "稳妥档（跨月/人流密集）",
+      "factor": 4.0,
+      "note": "人流密集或挂期跨月，预留大风与材料老化余量"
     }
   ]
 }

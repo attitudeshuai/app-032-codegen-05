@@ -2,10 +2,12 @@
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ChecksPanel from '../components/ChecksPanel.vue'
-import { getLantern } from '../core/store'
+import { getLantern, state as lanternState } from '../core/store'
+import { ensureState } from '../core/hangingStore'
+import { computeHanging } from '../core/hanging'
 import { computeAll } from '../core/checks'
 import { DEFAULT_LOFT_OPTIONS } from '../core/paginate'
-import { downloadText, materialsCsv } from '../core/exporter'
+import { downloadText, forceTableCsv, materialsCsv, riggingCsv } from '../core/exporter'
 import { coveringSpec, CRAFT } from '../core/craft'
 import { panelCutArea } from '../core/panels'
 
@@ -16,6 +18,20 @@ const full = computed(() => {
   const l = lantern.value
   if (!l) return null
   return computeAll(l, { ...DEFAULT_LOFT_OPTIONS, paper: l.pageSize, overlapMm: l.overlapMm })
+})
+
+/** 挂点受力同一份结果（与预览页、挂点页、导出同源），材料页据此算挂绳/吊环/加固件备多少 */
+const hanging = computed(() => {
+  const l = lantern.value
+  if (!l) return null
+  const s = ensureState(l.id, l)
+  return computeHanging(
+    l,
+    s.beam,
+    s.strategy,
+    s.items,
+    (id) => lanternState.lanterns.find((x) => x.id === id)
+  )
 })
 
 const cov = computed(() => (lantern.value ? coveringSpec(lantern.value.covering) : null))
@@ -44,10 +60,20 @@ function exportCsv() {
   if (!l || !full.value) return
   downloadText(`${l.name}-备料单.csv`, materialsCsv(l, full.value.materials, full.value.batch))
 }
+function exportForce() {
+  const l = lantern.value
+  if (!l || !hanging.value) return
+  downloadText(`${l.name}-受力表-第${hanging.value.revision}版.csv`, forceTableCsv(l, hanging.value))
+}
+function exportRigging() {
+  const l = lantern.value
+  if (!l || !hanging.value) return
+  downloadText(`${l.name}-挂装备料单-第${hanging.value.revision}版.csv`, riggingCsv(l, hanging.value))
+}
 </script>
 
 <template>
-  <div v-if="!lantern || !full || !cov" class="missing">找不到该灯样。<router-link to="/">返回</router-link></div>
+  <div v-if="!lantern || !full || !cov || !hanging" class="missing">找不到该灯样。<router-link to="/">返回</router-link></div>
   <div v-else class="materials">
     <section class="head">
       <div>
@@ -55,10 +81,13 @@ function exportCsv() {
         <p class="sub">
           竹篾按<b>含绑扎余量</b>长度备料；蒙面按<b>含缝份</b>的裁片面积备料；
           批量总量 = 单灯 × 数量 × (1 + 损耗率)。
+          挂绳/吊环/加固件按<b>第 {{ hanging.revision }} 版受力结果</b>备料，与预览页、挂点页、导出清单同源同数。
         </p>
       </div>
       <div class="ops">
         <button @click="exportCsv">导出备料单 CSV</button>
+        <button @click="exportForce">导出受力表 CSV</button>
+        <button @click="exportRigging">导出挂装备料单 CSV</button>
         <button class="primary" @click="router.push(`/print/${lantern.id}?view=frame`)">打印备料 / 清单</button>
       </div>
     </section>
@@ -122,6 +151,28 @@ function exportCsv() {
             <td class="num mono">{{ full.materials.ledCount }} 颗</td>
             <td class="num mono">{{ full.batch.ledCount }} 颗</td>
           </tr>
+          <tr class="weight">
+            <td>骨架重（备料 {{ full.materials.frameM }}m × {{ CRAFT.frameWeightGPerM }}g/m）</td>
+            <td class="num mono">{{ full.materials.frameWeightG.toFixed(1) }} g</td>
+            <td class="num mono">{{ full.batch.frameWeightG.toFixed(1) }} g</td>
+          </tr>
+          <tr class="weight">
+            <td>蒙面重（{{ full.materials.coveringM2 }}m² × {{ cov.name }} {{ cov.areaWeightGPerM2 }}g/m²，按面积非张数）</td>
+            <td class="num mono">{{ full.materials.coveringWeightG.toFixed(1) }} g</td>
+            <td class="num mono">{{ full.batch.coveringWeightG.toFixed(1) }} g</td>
+          </tr>
+          <tr class="weight">
+            <td>扎线 / 胶 / LED / 电池 / 顶部五金</td>
+            <td class="num mono">{{
+              (full.materials.lashWeightG + full.materials.glueWeightG + full.materials.ledWeightG + full.materials.batteryWeightG + full.materials.hardwareWeightG).toFixed(1) }} g</td>
+            <td class="num mono">{{
+              (full.batch.lashWeightG + full.batch.glueWeightG + full.batch.ledWeightG + full.batch.batteryWeightG + full.batch.hardwareWeightG).toFixed(1) }} g</td>
+          </tr>
+          <tr class="weight totalw">
+            <td>单灯总重（受力核定只取此数，三处同源）</td>
+            <td class="num mono strong">{{ full.materials.totalWeightG.toFixed(1) }} g ＝ {{ full.materials.totalWeightKg.toFixed(3) }} kg</td>
+            <td class="num mono strong">{{ full.batch.totalWeightG.toFixed(1) }} g</td>
+          </tr>
         </tbody>
       </table>
 
@@ -165,6 +216,41 @@ function exportCsv() {
           </tr>
         </tbody>
       </table>
+    </section>
+
+    <section class="rigging">
+      <div class="rg-head">
+        <h3>挂绳 / 吊环 / 加固件备料（取自第 {{ hanging.revision }} 版受力结果，与预览页/导出同一份）</h3>
+        <router-link :to="`/hanging/${lantern.id}`" class="rg-link">去挂点页调整 →</router-link>
+      </div>
+      <p class="rg-verdict" :class="hanging.allPass ? 'pass' : 'fail'">
+        {{ hanging.allPass ? '全杆合格，无需加固件' : hanging.checks.length + ' 段超档，需加固件 ' + hanging.rigging.stiffenerCount + ' 件（或按受力表改法加挂点/挪灯后清零）' }}
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>项目</th>
+            <th class="num">净用量</th>
+            <th class="num">含损耗备料</th>
+            <th>单位 / 说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>挂点孔位</td><td class="num mono">{{ hanging.rigging.pointCount }}</td><td class="num mono">{{ hanging.rigging.pointCount }}</td><td>个 · 孔位随版本作废重开</td></tr>
+          <tr><td>挂绳</td><td class="num mono">{{ hanging.rigging.ropeRawM.toFixed(3) }}</td><td class="num mono strong">{{ hanging.rigging.ropeM.toFixed(3) }}</td><td>m · 逐点长度见受力表，含 8% 损耗</td></tr>
+          <tr><td>吊环</td><td class="num mono">{{ hanging.rigging.ringCount }}</td><td class="num mono strong">{{ Math.ceil(hanging.rigging.ringCount * 1.05) }}</td><td>只 · 直吊 1/点、斜吊 2/点，含 5% 损耗</td></tr>
+          <tr><td>支座固定夹</td><td class="num mono">{{ hanging.rigging.clampCount }}</td><td class="num mono">{{ Math.ceil(hanging.rigging.clampCount * 1.05) }}</td><td>副 · 每支座 1 副</td></tr>
+          <tr :class="{ over: hanging.rigging.stiffenerCount > 0 }">
+            <td>加固件</td><td class="num mono">{{ hanging.rigging.stiffenerCount }}</td><td class="num mono">{{ Math.ceil(hanging.rigging.stiffenerCount * 1.05) }}</td>
+            <td>件 · {{ hanging.rigging.stiffenerCount ? '用于 ' + hanging.rigging.stiffenerSegmentIds.join('、') : '本版不需要' }}</td>
+          </tr>
+          <tr><td>横杆备料（{{ hanging.section.name }}）</td><td class="num mono">{{ (hanging.rigging.beamStockMm / 1000).toFixed(3) }}</td><td class="num mono">{{ (hanging.rigging.beamStockMm / 1000).toFixed(3) }}</td><td>m · 一整根，自重 {{ hanging.rigging.beamWeightKg }}kg</td></tr>
+          <tr><td>挂装五金合计重</td><td class="num mono">{{ hanging.rigging.totalRiggingWeightG.toFixed(1) }}</td><td class="num mono">{{ hanging.rigging.totalRiggingWeightG.toFixed(1) }}</td><td>g</td></tr>
+        </tbody>
+      </table>
+      <ul class="rg-changes">
+        <li v-for="(t, i) in hanging.changes.materials" :key="i">本页变化：{{ t }}</li>
+      </ul>
     </section>
 
     <ChecksPanel :checks="full.checks" :elapsed-ms="full.elapsedMs" title="全量验收自检（§10）" />
@@ -336,6 +422,65 @@ input[type='range'] {
 
 tr.led td {
   background: #fff9ec;
+}
+
+tr.weight td {
+  background: #f4f8f6;
+  font-size: 12px;
+}
+
+tr.totalw td {
+  background: #e8f3ee;
+}
+
+.rigging {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 16px;
+  box-shadow: var(--shadow);
+}
+
+.rg-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.rigging h3 {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+
+.rg-link {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.rg-verdict {
+  margin: 0 0 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.rg-verdict.pass {
+  color: var(--jade);
+}
+
+.rg-verdict.fail {
+  color: var(--red);
+}
+
+.rigging tr.over td {
+  background: #fdf0ee;
+}
+
+.rg-changes {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 11.5px;
+  color: var(--ink-soft);
 }
 
 .num {
